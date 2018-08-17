@@ -2,10 +2,32 @@
 # -*- coding: utf-8 -*-
 import argparse
 from WSDiscovery import WSDiscovery
-from urlparse import urlparse, parse_qs
-#from urllib.parse import urlparse, parse_qs
-
+from urlparse import urlparse
+import subprocess
 from onvif import ONVIFCamera
+
+
+# def getStreamUriFromIP(ip=""):
+#     try:
+#         mycam = ONVIFCamera(IP, 80, 'user', '12345678')
+#     except:
+#         return None
+#     media_service = mycam.create_media_service()
+#     #profiles = media_service.GetProfiles()
+#     #token = profiles[0]._token
+#     uri = media_service.GetStreamUri()
+#
+#     return (uri.Uri).replace("rtsp://", "rtsp://" + "user" + ":" + "12345678" + "@")
+
+def getMACaddrFromIP(ip=""):
+    p = subprocess.Popen(['arp', '-n'], stdout=subprocess.PIPE)
+    out = p.communicate()[0]
+    try:
+        arp = [x for x in out.split('\n') if ip in x][0]
+        return ' '.join(arp.split()).split()[2]
+    except IndexError:
+        return None
+
 
 def Onvifdiscovery(retries=3):
     wsd = WSDiscovery()
@@ -38,16 +60,9 @@ if __name__ == "__main__":
     if len(IPC) < 1:
         pass
     else:
-        #print IPC
         for camera in IPC:
             selected = urlparse(camera)
-            try:
-                mycam = ONVIFCamera(selected.netloc, 80, 'user', '12345678')
-            except:
-                continue
-            media_service = mycam.create_media_service()
-            profiles = media_service.GetProfiles()
-            token = profiles[0]._token
-            uri = media_service.GetStreamUri()
-
-            print (uri.Uri).replace("rtsp://", "rtsp://" + "user" + ":" + "12345678" + "@")
+            IP = str(selected.netloc).replace(":80", "")
+            # print IP and MAC
+            print IP
+            print str(getMACaddrFromIP(IP)).replace(":", "-")
