@@ -11,7 +11,6 @@ import time
 import uuid
 import threading
 import sys
-import select
 import os
 try:
     import netifaces
@@ -28,6 +27,9 @@ try:
     from urllib.parse import unquote  # Python 3
 except ImportError:
     from urllib2 import unquote  # Python 2
+
+import select
+_has_poll = hasattr(select, 'poll')
 
 
 BUFFER_SIZE = 0xffff
@@ -867,8 +869,9 @@ class NetworkingThread(_StopableDaemonThread):
         self._knownMessageIds = set()
         self._iidMap = {}
         self._observer = observer
-        
-        self._poll = select.poll()
+
+        if _has_poll:
+            self._poll = select.poll()
 
     @staticmethod
     def _makeMreq(addr):
@@ -906,7 +909,8 @@ class NetworkingThread(_StopableDaemonThread):
         
         sock = self._createMulticastOutSocket(addr)
         self._multiOutUniInSockets[addr] = sock
-        self._poll.register(sock, select.POLLIN)
+        if _has_poll:
+            self._poll.register(sock, select.POLLIN)
     
     def removeSourceAddr(self, addr):
         try:
@@ -915,7 +919,8 @@ class NetworkingThread(_StopableDaemonThread):
             pass
 
         sock = self._multiOutUniInSockets[addr]
-        self._poll.unregister(sock)
+        if _has_poll:
+            self._poll.unregister(sock)
         sock.close()
         del self._multiOutUniInSockets[addr]
 
@@ -934,8 +939,51 @@ class NetworkingThread(_StopableDaemonThread):
     def run(self):
         while not self._quitEvent.is_set() or self._queue:
             self._sendPendingMessages()
-            self._recvMessages()
-    
+            if _has_poll:
+                self._recvMessages()
+            else:
+                self._recvMessages_win()
+
+    def _recvMessages_win(self):
+        socks = list(self._multiOutUniInSockets.values())
+        socks.append(self._multiInSocket)
+        for sock in socks:
+            try:
+                data, addr = sock.recvfrom(BUFFER_SIZE)
+            except socket.error:
+                time.sleep(0.01)
+                continue
+
+            env = parseEnvelope(data, addr[0])
+
+            if env is None:  # fault or failed to parse
+                continue
+
+            mid = env.getMessageId()
+            if mid in self._knownMessageIds:
+                continue
+            else:
+                self._knownMessageIds.add(mid)
+
+            iid = env.getInstanceId()
+            iid = int(iid) if iid else 0
+            mid = env.getMessageId()
+            if iid > 0:
+                mnum = env.getMessageNumber()
+                key = addr[0] + ":" + str(addr[1]) + ":" + str(iid)
+                if mid is not None and len(mid) > 0:
+                    key = key + ":" + mid
+                if not self._iidMap.has_key(key):
+                    self._iidMap[key] = iid
+                else:
+                    tmnum = self._iidMap[key]
+                    if mnum > tmnum:
+                        self._iidMap[key] = mnum
+                    else:
+                        continue
+
+            self._observer.envReceived(env, addr)
+
     def _recvMessages(self):
         for fd, event in self._poll.poll(0):
             sock = socket.fromfd(fd, socket.AF_INET, socket.SOCK_DGRAM)
@@ -1001,19 +1049,19 @@ class NetworkingThread(_StopableDaemonThread):
 
     def start(self):
         super(NetworkingThread, self).start()
-        
         self._uniOutSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        
         self._multiInSocket = self._createMulticastInSocket()
-        self._poll.register(self._multiInSocket)
+
+        if _has_poll:
+            self._poll.register(self._multiInSocket)
         
         self._multiOutUniInSockets = {}  # FIXME synchronisation
         
     def join(self):
         super(NetworkingThread, self).join()
         self._uniOutSocket.close()
-        
-        self._poll.unregister(self._multiInSocket)
+        if _has_poll:
+            self._poll.unregister(self._multiInSocket)
         self._multiInSocket.close()
 
 
