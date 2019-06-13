@@ -1,44 +1,65 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from WSDiscovery import WSDiscovery
-from urlparse import urlparse
-import subprocess
+import time
+from WSDiscovery import WSDiscovery, QName
+from urllib.parse import urlparse
+from onvif import ONVIFCamera, ONVIFError
+
+ONVIF_TYPE = QName('http://www.onvif.org/ver10/network/wsdl', 'NetworkVideoTransmitter')
+
+try_auth = [
+    ('admin', 'pass'),  # Lilin
+    ('admin', '1234'),  #
+    ('admin', 'dh123456'),  # Dahua
+]
 
 
-def getMACaddrFromIP(ip=""):
-    # nmap -sP 192.168.*.*
-    p = subprocess.Popen(['arp', '-n'], stdout=subprocess.PIPE)
-    out = p.communicate()[0]
-    try:
-        arp = [x for x in out.split('\n') if ip in x][0]
-        return ' '.join(arp.split()).split()[2]
-    except IndexError:
-        return None
+def discovery():
+    ret = []
+    for service in wsd.searchServices(types=[ONVIF_TYPE]):
+        url = urlparse(service.getXAddrs()[0])
+        scopes = service.getScopes()
+        print(" Scopes:")
+        for scope in scopes:
+            print("  {})".format(repr(scope)))
+        ret.append(url)
 
-
-def Onvifdiscovery(retries=3):
-    wsd = WSDiscovery()
-    wsd.start()
-    resp = []
-    a = 0
-    while not resp and a < retries:
-        ret = wsd.searchServices()
-        wsd._sendProbe()
-        a = a + 1
-        for service in ret:
-            tmp = urlparse(service.getXAddrs()[0])
-            if (tmp.path.find("/onvif/device_service")) >= 0:
-                resp.append(service.getXAddrs()[0])
-
-    return resp
+    return ret
 
 
 if __name__ == "__main__":
-    IPC = Onvifdiscovery()
-    if len(IPC) >= 1:
-        for camera in IPC:
-            selected = urlparse(camera)
-            IP = str(selected.netloc).replace(":80", "")
-            # print IP and MAC
-            print IP, str(getMACaddrFromIP(IP)).replace(":", "")
+    wsd = WSDiscovery()
+    wsd.start()
+    all_ipc = discovery()
+    started = time.time()
+    for cam in all_ipc:
+        if cam.port is None:
+            port = 80
+        else:
+            port = cam.netloc.split(':')[1]
+
+        for auth_info in try_auth:
+            try:
+                print("Trying ONVIFCamera({ip}, {port}, {user}, {passwd})".format(
+                    ip=cam.hostname, port=port, user=auth_info[0], passwd=auth_info[1]
+                ))
+                IP_cam = ONVIFCamera(cam.hostname, port, auth_info[0], auth_info[1], '/etc/onvif/wsdl/')
+            except ONVIFError as e:
+                print("Got error {}".format(e))
+                continue
+
+            print(" Streams:")
+            media_service = IP_cam.create_media_service()
+            profiles = media_service.GetProfiles()
+            for profile in profiles:
+                try:
+                    obj = media_service.create_type('GetStreamUri')
+                    obj.ProfileToken = profile._token
+                    obj.StreamSetup = {'Stream': 'RTP-Unicast', 'Transport': {'Protocol': 'RTSP'}}
+                    resp = media_service.GetStreamUri(obj)
+                    print("  {}".format(resp.Uri))
+                except ONVIFError as e:
+                    print("Got error {} from GetStreamUri({})".format(e, obj))
+                    continue
+    wsd.stop()

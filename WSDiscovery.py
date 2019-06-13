@@ -1546,46 +1546,21 @@ class WSDiscovery:
         time.sleep(0.001)
 
 
-def showEnv(env):
-    print("-----------------------------")
-    print("Action: %s" % env.getAction())
-    print("MessageId: %s" % env.getMessageId())
-    print("InstanceId: %s" % env.getInstanceId())
-    print("MessageNumber: %s" % env.getMessageNumber())
-    print("Reply To: %s" % env.getReplyTo())
-    print("To: %s" % env.getTo())
-    print("RelatesTo: %s" % env.getRelatesTo())
-    print("Relationship Type: %s" % env.getRelationshipType())
-    print("Types: %s" % env.getTypes())
-    print("Scopes: %s" % env.getScopes())
-    print("EPR: %s" % env.getEPR())
-    print("Metadata Version: %s" % env.getMetadataVersion())
-    print("Probe Matches: %s" % env.getProbeResolveMatches())
-    print("-----------------------------")
+def get_network_video():
+    discovery = WSDiscovery()
+    discovery.start()
+    ONVIF_TYPE_NVT = QName('http://www.onvif.org/ver10/network/wsdl', 'NetworkVideoTransmitter')
+    _list = discovery.searchServices(types=[ONVIF_TYPE_NVT])
+    discovery.stop()
+    return _list
 
 
 if __name__ == "__main__":
     wsd = WSDiscovery()
     wsd.start()
-
-    ttype = QName("abc", "def")
-
-    ttype1 = QName("namespace", "myTestService")
-    scope1 = Scope("http://myscope")
-    ttype2 = QName("namespace", "myOtherTestService_type1")
-    scope2 = Scope("http://other_scope")
-
-    xAddrs = ["localhost:8080/abc", '{ip}/device_service']
-    wsd.publishService(types=[ttype], scopes=[scope2], xAddrs=xAddrs)
-
-    # ret = wsd.searchServices(scopes=[scope1], timeout=10)
-
-    # nvt = QName("http://www.onvif.org/ver10/network/wsdl", "NetworkVideoTransmitter")
-    # ret = wsd.searchServices(types=[nvt])
-
-    ret = wsd.searchServices()
-
+    nvt = QName("http://www.onvif.org/ver10/network/wsdl", "NetworkVideoTransmitter")
+    ret = wsd.searchServices(types=[nvt])
     for service in ret:
-        print(service.getEPR() + ":" + service.getXAddrs()[0])
+        print(service.getXAddrs()[0][:-20])
 
     wsd.stop()
