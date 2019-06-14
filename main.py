@@ -5,7 +5,7 @@ import time
 from WSDiscovery import WSDiscovery, QName
 from urllib.parse import urlparse
 from onvif import ONVIFCamera, ONVIFError
-
+import zeep
 import logging
 logging.getLogger("requests").setLevel(logging.WARNING)  # disable log messages from the Requests
 
@@ -16,6 +16,13 @@ try_auth = [
     ('admin', 'pass'),  # Lilin
     ('admin', 'dh123456'),  # Dahua
 ]
+
+
+def zeep_pythonvalue(self, xmlvalue):
+    return xmlvalue
+
+
+zeep.xsd.simple.AnySimpleType.pythonvalue = zeep_pythonvalue
 
 
 def discovery():
