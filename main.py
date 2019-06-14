@@ -6,11 +6,14 @@ from WSDiscovery import WSDiscovery, QName
 from urllib.parse import urlparse
 from onvif import ONVIFCamera, ONVIFError
 
+import logging
+logging.getLogger("requests").setLevel(logging.WARNING)  # disable log messages from the Requests
+
+
 ONVIF_TYPE = QName('http://www.onvif.org/ver10/network/wsdl', 'NetworkVideoTransmitter')
 
 try_auth = [
     ('admin', 'pass'),  # Lilin
-    ('admin', '1234'),  #
     ('admin', 'dh123456'),  # Dahua
 ]
 
@@ -41,21 +44,24 @@ if __name__ == "__main__":
 
         for auth_info in try_auth:
             try:
-                print("Trying ONVIFCamera({ip}, {port}, {user}, {passwd})".format(
-                    ip=cam.hostname, port=port, user=auth_info[0], passwd=auth_info[1]
-                ))
-                IP_cam = ONVIFCamera(cam.hostname, port, auth_info[0], auth_info[1], '/etc/onvif/wsdl/')
+                IP_cam = ONVIFCamera(cam.hostname, port, auth_info[0], auth_info[1], '/home/jk/.local/lib/python3.5/site-packages/onvif/wsdl')
             except ONVIFError as e:
-                print("Got error {}".format(e))
+                # print("ONVIFCamera Got error {}".format(e))
+                continue
+
+            try:
+                media_service = IP_cam.create_media_service()
+                profiles = media_service.GetProfiles()
+            except ONVIFError as e:
+                # print("GetProfiles Got error {}".format(e))
                 continue
 
             print(" Streams:")
-            media_service = IP_cam.create_media_service()
-            profiles = media_service.GetProfiles()
+
             for profile in profiles:
                 try:
                     obj = media_service.create_type('GetStreamUri')
-                    obj.ProfileToken = profile._token
+                    obj.ProfileToken = profile.token
                     obj.StreamSetup = {'Stream': 'RTP-Unicast', 'Transport': {'Protocol': 'RTSP'}}
                     resp = media_service.GetStreamUri(obj)
                     print("  {}".format(resp.Uri))
