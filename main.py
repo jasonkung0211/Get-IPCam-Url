@@ -15,6 +15,13 @@ ONVIF_TYPE = QName('http://www.onvif.org/ver10/network/wsdl', 'NetworkVideoTrans
 try_auth = [
     ('admin', 'pass'),  # Lilin
     ('admin', 'dh123456'),  # Dahua
+    ('root', 'pass'),  # AXIS
+    ('root', 'vivotek123')
+    # ('root', '28187266'),  # AXIS
+    # ('admin', 'admin'),
+    # ('admin', '123456'),
+    # ('root', 'system'),  # IQinVision
+    # ('user', 'pass'),
 ]
 
 
@@ -55,7 +62,7 @@ if __name__ == "__main__":
             except ONVIFError as e:
                 # print("ONVIFCamera Got error {}".format(e))
                 continue
-
+            print(IP_cam.host)
             try:
                 media_service = IP_cam.create_media_service()
                 profiles = media_service.GetProfiles()
